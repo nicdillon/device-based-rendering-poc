@@ -1,0 +1,25 @@
+/*
+ * Render-blocking media queries that control which variant is visible
+ * BEFORE JavaScript runs. The browser evaluates these before first paint,
+ * so the user never sees the wrong variant.
+ *
+ * Breakpoint (768px) MUST match BREAKPOINTS.mobile in src/lib/breakpoints.ts.
+ */
+
+.mobile {
+  display: block;
+}
+
+.desktop {
+  display: none;
+}
+
+@media (min-width: 769px) {
+  .mobile {
+    display: none;
+  }
+
+  .desktop {
+    display: block;
+  }
+}
