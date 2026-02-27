@@ -1,36 +1,45 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Device-Based Rendering with ISR
 
-## Getting Started
+## The Challenge
 
-First, run the development server:
+Reading `user-agent` headers or cookies to detect device type opts Next.js pages into **dynamic rendering**, breaking static generation (ISR/SSG). The question: how do we conditionally render mobile vs desktop components while preserving ISR?
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+## Our Solution: CSS-First Device Rendering
+
+Render **both** mobile and desktop variants into a single ISR-cached HTML response. Use render-blocking CSS media queries to hide the wrong variant before first paint (zero flicker). After React hydration, detect the viewport via `matchMedia` and unmount the hidden variant to free resources.
+
+```
+Server (ISR) ─► HTML contains both variants
+                    │
+Browser (pre-paint) ─► CSS media queries hide the wrong one (render-blocking, no flicker)
+                    │
+Browser (post-hydration) ─► matchMedia detects viewport, unmounts hidden variant
+                    │
+Result ─► Only the correct component is mounted, with full client API access
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+**Core component**: `DeviceRenderer` accepts `mobile` and `desktop` as `ReactNode` props. Uses `useState(null)` to render both on first pass (matching server HTML), then switches to single-variant after `useEffect`.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Comparison: CSS-First vs Precomputed Flags (Vercel Flags SDK)
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+| | CSS-First (this POC) | Precomputed Flags |
+|---|---|---|
+| **ISR preserved** | Yes | Yes |
+| **Static permutations** | None added | Doubled (mobile + desktop per page) |
+| **n product sizes example** | n pages | 2n pages |
+| **Flicker** | None (CSS is render-blocking) | None (correct variant served) |
+| **HTML payload** | Both variants in one response (~2-5 KB extra) | Single variant per response |
+| **Post-hydration cleanup** | Hidden variant unmounted | N/A |
+| **Server device detection** | Not needed | Required (UA header) |
+| **Implementation complexity** | One component (`DeviceRenderer`) | Flags SDK setup + middleware + rewrite rules |
+| **Scales with variants** | Linearly (one page, CSS toggles) | Multiplicatively (pages x variants) |
 
-## Learn More
+## When to Use Which
 
-To learn more about Next.js, take a look at the following resources:
+**CSS-First** (this approach): Best when mobile and desktop share the same data and differ primarily in layout/interaction. No permutation cost, minimal payload overhead.
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+**Precomputed Flags**: Better when variants need fundamentally different data fetching or when the mobile/desktop component trees are very large and shipping both is a measurable performance concern.
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## Existing Precedent
 
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+The nectarsleep codebase already uses this pattern via its `ResponsiveRenderer` component, which renders both variants with MUI `display` props. Our `DeviceRenderer` improves on this by unmounting the hidden variant after hydration, freeing memory and stopping effects/event listeners.
