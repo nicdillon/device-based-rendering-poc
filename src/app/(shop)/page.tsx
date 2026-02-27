@@ -20,7 +20,7 @@ export default function HomePage() {
         desktop={<HeroDesktop />}
       />
 
-      <IsrTimestamp generatedAt={generatedAt} revalidateSeconds={10} />
+      <IsrTimestamp generatedAt={generatedAt} revalidateSeconds={60} />
 
       <section className="py-16 px-6 max-w-3xl mx-auto space-y-6 text-center">
         <h2 className="text-2xl font-bold">How This Works</h2>
